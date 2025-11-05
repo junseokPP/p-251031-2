@@ -3,7 +3,6 @@ package com.back.domain.member.member.entity;
 import com.back.global.jpa.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -14,7 +13,6 @@ import java.util.List;
 import java.util.UUID;
 
 @NoArgsConstructor
-@Getter
 @Entity
 public class Member extends BaseEntity {
 
@@ -65,6 +63,26 @@ public class Member extends BaseEntity {
     public void update(String nickname, String profileImgUrl) {
         this.nickname = nickname;
         this.profileImgUrl = profileImgUrl;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public String getNickname() {
+        return nickname;
+    }
+
+    public String getApiKey() {
+        return apiKey;
+    }
+
+    public String getProfileImgUrl() {
+        return profileImgUrl;
     }
 }
 

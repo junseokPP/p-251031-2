@@ -1,100 +1,111 @@
-package com.back.global.security;
+package com.back.global.security
 
-import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.header.writers.frameoptions.XFrameOptionsHeaderWriter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
-import java.util.List;
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpMethod
+import org.springframework.security.config.annotation.web.builders.HttpSecurity
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
+import org.springframework.security.config.annotation.web.invoke
+import org.springframework.security.config.http.SessionCreationPolicy
+import org.springframework.security.web.AuthenticationEntryPoint
+import org.springframework.security.web.SecurityFilterChain
+import org.springframework.security.web.access.AccessDeniedHandler
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import org.springframework.web.cors.CorsConfiguration
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 
 @Configuration
 @EnableWebSecurity
-@RequiredArgsConstructor
-public class SecurityConfig {
-
-    private final CustomAuthenticationFilter customAuthenticationFilter;
-    private final CustomOAuth2LoginSuccessHandler customOAuth2LoginSuccessHandler;
-    private final CustomOAuth2AuthorizationRequestResolver customOAuth2AuthorizationRequestResolver;
+class SecurityConfig(
+    private val customAuthenticationFilter: CustomAuthenticationFilter,
+    private val customOAuth2LoginSuccessHandler: CustomOAuth2LoginSuccessHandler,
+    private val customOAuth2AuthorizationRequestResolver: CustomOAuth2AuthorizationRequestResolver
+) {
 
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-                .authorizeHttpRequests((authorizeHttpRequests) -> authorizeHttpRequests
-                        .requestMatchers("/favicon.ico").permitAll()
-                        .requestMatchers("/h2-console/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/*/posts", "/api/*/posts/{id:\\d+}",
-                                "/api/*/posts/{postId:\\d+}/comments", "/api/*/posts/{postId:\\d+}/comments/{commentId:\\d+}").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/members/login", "/api/v1/members/join").permitAll()
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/members/logout").permitAll()
-                        .requestMatchers("/api/*/adm/**").hasRole("ADMIN")
-                        .requestMatchers("/api/*/**").authenticated()
-                        .anyRequest().permitAll())
-                .csrf((csrf) -> csrf.disable())
-                .headers((headers) -> headers
-                        .addHeaderWriter(new XFrameOptionsHeaderWriter(
-                                XFrameOptionsHeaderWriter.XFrameOptionsMode.SAMEORIGIN)))
-                .addFilterBefore(customAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .sessionManagement(sessionManagement ->
-                        sessionManagement.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .oauth2Login(oauth2 -> {
-                    oauth2
-                            .successHandler(customOAuth2LoginSuccessHandler)
-                            .authorizationEndpoint(authorizationEndPoint ->
-                                    authorizationEndPoint.authorizationRequestResolver(customOAuth2AuthorizationRequestResolver)
-                            );
-                })
-                .exceptionHandling(
-                        exceptionHandling -> exceptionHandling
-                                .authenticationEntryPoint((request, response, authenticationException) -> {
-                                    response.setContentType("application/json; charset=UTF-8");
-                                    response.setStatus(401);
-                                    response.getWriter().write(
-                                            """
-                                                        {
-                                                            "resultCode": "401-1",
-                                                            "msg": "로그인 후 이용해주세요."
-                                                        }
-                                                    """);
-                                })
-                                .accessDeniedHandler((request, response, accessDeniedException) -> {
-                                            response.setContentType("application/json; charset=UTF-8");
-                                            response.setStatus(403);
-                                            response.getWriter().write(
-                                                    """
-                                                                {
-                                                                    "resultCode": "403-1",
-                                                                    "msg": "권한이 없습니다."
-                                                                }
-                                                            """);
-                                        }
-                                ));
-        ;
+    fun filterChain(http: HttpSecurity): SecurityFilterChain {
 
-        return http.build();
+        http {
+            authorizeHttpRequests {
+                authorize("/favicon.ico", permitAll)
+                authorize("/h2-console/**", permitAll)
+                authorize(HttpMethod.GET, "/api/*/posts", permitAll)
+                authorize(HttpMethod.GET, "/api/*/posts/{id:\\d+}", permitAll)
+                authorize(HttpMethod.GET, "/api/*/posts/{postId:\\d+}/comments", permitAll)
+                authorize(HttpMethod.GET, "/api/*/posts/{postId:\\d+}/comments/{commentId:\\d+}", permitAll)
+                authorize(HttpMethod.POST, "/api/v1/members/login", permitAll)
+                authorize(HttpMethod.POST, "/api/v1/members/join", permitAll)
+                authorize(HttpMethod.DELETE, "/api/v1/members/logout", permitAll)
+                authorize("/api/*/adm/**", hasRole("ADMIN"))
+                authorize("/api/*/**", authenticated)
+                authorize(anyRequest, permitAll)
+            }
+
+            csrf { disable() }
+
+            headers {
+                frameOptions { sameOrigin = true }
+            }
+
+            addFilterBefore<UsernamePasswordAuthenticationFilter>(customAuthenticationFilter)
+            sessionManagement {
+                sessionCreationPolicy = SessionCreationPolicy.STATELESS
+            }
+
+            oauth2Login {
+                authenticationSuccessHandler = customOAuth2LoginSuccessHandler
+                authorizationEndpoint {
+                    authorizationRequestResolver = customOAuth2AuthorizationRequestResolver
+                }
+            }
+
+            exceptionHandling {
+                authenticationEntryPoint = AuthenticationEntryPoint { _, response, _ ->
+                    response.contentType =
+                        "application/json; charset=UTF-8"
+                    response.status = 401
+                    response.writer.write(
+                        """
+                            {
+                                "resultCode": "401-1",
+                                "msg": "로그인 후 이용해주세요."
+                            }
+                            """.trimIndent()
+                    )
+                }
+
+                accessDeniedHandler = AccessDeniedHandler { _, response, _ ->
+                    response.contentType =
+                        "application/json; charset=UTF-8"
+                    response.status = 403
+                    response.writer.write(
+                        """
+                            {
+                                "resultCode": "403-1",
+                                "msg": "권한이 없습니다."
+                            }
+                        """.trimIndent()
+                    )
+                }
+            }
+        }
+
+        return http.build()
     }
 
     @Bean
-    public UrlBasedCorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
+    fun corsConfigurationSource(): UrlBasedCorsConfigurationSource {
+        val configuration = CorsConfiguration().apply {
+            allowedOrigins =
+                listOf("https://cdpn.io", "http://localhost:3000")
+            allowedMethods =
+                listOf("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+            allowedHeaders = listOf("*")
+            allowCredentials = true
+        }
 
-        configuration.setAllowedOrigins(List.of("https://cdpn.io", "http://localhost:3000"));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-
-        configuration.setAllowedHeaders(List.of("*"));
-
-        configuration.setAllowCredentials(true);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", configuration);
-
-        return source;
+        return UrlBasedCorsConfigurationSource().apply {
+            registerCorsConfiguration("/api/**", configuration)
+        }
     }
 }

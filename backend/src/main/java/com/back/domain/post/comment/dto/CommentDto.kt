@@ -1,27 +1,25 @@
-package com.back.domain.post.comment.dto;
+package com.back.domain.post.comment.dto
 
-import com.back.domain.post.comment.entity.Comment;
+import com.back.domain.post.comment.entity.Comment
+import java.time.LocalDateTime
 
-import java.time.LocalDateTime;
-
-public record CommentDto(
-        Long id,
-        LocalDateTime createDate,
-        LocalDateTime modifyDate,
-        String content,
-        Long authorId,
-        String authorName,
-        Long postId
+@JvmRecord
+data class CommentDto private constructor(
+    val id: Long,
+    val createDate: LocalDateTime,
+    val modifyDate: LocalDateTime,
+    val content: String,
+    val authorId: Long,
+    val authorName: String,
+    val postId: Long
 ) {
-    public CommentDto(Comment comment) {
-        this(
-                comment.getId(),
-                comment.getCreateDate(),
-                comment.getModifyDate(),
-                comment.getContent(),
-                comment.getAuthor().getId(),
-                comment.getAuthor().getName(),
-                comment.getPost().getId()
-        );
-    }
+    constructor(comment: Comment) : this(
+        comment.id,
+        comment.createDate,
+        comment.modifyDate,
+        comment.content,
+        comment.author.id,
+        comment.author.name,
+        comment.post.id
+    )
 }

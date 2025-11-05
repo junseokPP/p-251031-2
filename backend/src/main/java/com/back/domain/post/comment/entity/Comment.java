@@ -1,21 +1,19 @@
 package com.back.domain.post.comment.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.back.domain.member.member.entity.Member;
 import com.back.domain.post.post.entity.Post;
 import com.back.global.exception.ServiceException;
 import com.back.global.jpa.entity.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.ManyToOne;
 import lombok.AllArgsConstructor;
-import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
 @AllArgsConstructor
 @NoArgsConstructor
-@Getter
 public class Comment extends BaseEntity {
 
     private String content;
@@ -45,5 +43,17 @@ public class Comment extends BaseEntity {
         if(!this.author.getId().equals(actor.getId())) {
             throw new ServiceException("403-2", "댓글 삭제 권한이 없습니다.");
         }
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public Post getPost() {
+        return post;
+    }
+
+    public Member getAuthor() {
+        return author;
     }
 }

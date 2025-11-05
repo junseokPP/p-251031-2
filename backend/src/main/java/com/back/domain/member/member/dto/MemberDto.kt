@@ -1,23 +1,21 @@
-package com.back.domain.member.member.dto;
+package com.back.domain.member.member.dto
 
-import com.back.domain.member.member.entity.Member;
+import com.back.domain.member.member.entity.Member
+import java.time.LocalDateTime
 
-import java.time.LocalDateTime;
-
-public record MemberDto(
-        Long id,
-        LocalDateTime createDate,
-        LocalDateTime modifyDate,
-        String name,
-        boolean isAdmin
+@JvmRecord
+data class MemberDto private constructor(
+    val id: Long,
+    val createDate: LocalDateTime,
+    val modifyDate: LocalDateTime,
+    val name: String,
+    val isAdmin: Boolean
 ) {
-    public MemberDto(Member member) {
-        this(
-                member.getId(),
-                member.getCreateDate(),
-                member.getModifyDate(),
-                member.getName(),
-                member.isAdmin()
-        );
-    }
+    constructor(member: Member) : this(
+        member.id,
+        member.createDate,
+        member.modifyDate,
+        member.name,
+        member.isAdmin
+    )
 }

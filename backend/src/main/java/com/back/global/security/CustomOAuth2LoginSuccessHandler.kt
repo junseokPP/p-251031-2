@@ -1,45 +1,53 @@
-package com.back.global.security;
+package com.back.global.security
 
-import com.back.domain.member.member.entity.Member;
-import com.back.domain.member.member.service.MemberService;
-import com.back.global.rq.Rq;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
-import org.springframework.stereotype.Component;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+import com.back.domain.member.member.entity.Member
+import com.back.domain.member.member.service.MemberService
+import com.back.global.rq.Rq
+import jakarta.servlet.ServletException
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
+import org.springframework.security.core.Authentication
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler
+import org.springframework.stereotype.Component
+import java.io.IOException
+import java.nio.charset.StandardCharsets
+import java.util.*
 
 @Component
-@RequiredArgsConstructor
-public class CustomOAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
+class CustomOAuth2LoginSuccessHandler(
+    private val memberService: MemberService,
+    private val rq: Rq
+) : AuthenticationSuccessHandler {
 
-    private final MemberService memberService;
-    private final Rq rq;
+    @Throws(IOException::class, ServletException::class)
+    override fun onAuthenticationSuccess(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        authentication: Authentication
+    ) {
+        val member: Member = rq.actor
+        val accessToken = memberService.genAccessToken(member)
+        val apiKey = member.apiKey
 
-    @Override
-    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
+        rq.setCookie("accessToken", accessToken)
+        rq.setCookie("apiKey", apiKey)
 
-        Member member = rq.getActor();
-        String accessToken = memberService.genAccessToken(member);
-        String apiKey = member.getApiKey();
+        val state = request.getParameter("state").orEmpty()
+        var redirectUrl = "/"
 
-        rq.setCookie("accessToken", accessToken);
-        rq.setCookie("apiKey", apiKey);
+        if (state.isNotBlank()) {
+            runCatching {
+                val decodedState = Base64.getUrlDecoder()
+                    .decode(state)
+                    .toString(StandardCharsets.UTF_8)
 
-        String state = request.getParameter("state");
-        String redirectUrl = "/";
-
-        if(!state.isBlank()) {
-            String decodedState = new String(Base64.getUrlDecoder().decode(state), StandardCharsets.UTF_8);
-            redirectUrl = decodedState.split("#")[1];
+                decodedState.split("#", limit = 2)
+                    .getOrNull(1)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { redirectUrl = it }
+            }
         }
 
-        rq.sendRedirect(redirectUrl);
+        rq.sendRedirect(redirectUrl)
     }
 }

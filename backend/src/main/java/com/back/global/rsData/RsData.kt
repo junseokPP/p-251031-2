@@ -1,27 +1,24 @@
-package com.back.global.rsData;
+package com.back.global.rsData
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
+import com.fasterxml.jackson.annotation.JsonIgnore
+import lombok.AllArgsConstructor
+import lombok.Getter
 
 @AllArgsConstructor
 @Getter
-public class RsData<T> {
+class RsData<T> @JvmOverloads constructor
+    (val resultCode: String,
+     val msg: String,
+     val data: T? = null) {
 
-    private String resultCode;
-    private String msg;
-    private T data;
 
-    public RsData(String resultCode, String msg) {
-        this.resultCode = resultCode;
-        this.msg = msg;
-        this.data = null;
-    }
 
-    @JsonIgnore
-    public int getStatusCode() {
-        String statusCode = resultCode.split("-")[0];
-        return Integer.parseInt(statusCode);
-    }
 
+    @get:JsonIgnore
+    val statusCode: Int
+        get() {
+            val statusCode =
+                resultCode.split("-".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()[0]
+            return statusCode.toInt()
+        }
 }

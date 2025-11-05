@@ -1,49 +1,47 @@
-package com.back.global.security;
+package com.back.global.security
 
-import com.back.domain.member.member.entity.Member;
-import com.back.domain.member.member.service.MemberService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
-import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
-import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
-import org.springframework.security.oauth2.core.user.OAuth2User;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Map;
+import com.back.domain.member.member.entity.Member
+import com.back.domain.member.member.service.MemberService
+import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService
+import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException
+import org.springframework.security.oauth2.core.user.OAuth2User
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 @Service
-@RequiredArgsConstructor
-public class CustomOAuth2UserService extends DefaultOAuth2UserService {
-
-    private final MemberService memberService;
+class CustomOAuth2UserService(
+    private val memberService: MemberService
+) : DefaultOAuth2UserService() {
 
     @Transactional
-    public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
+    @Throws(OAuth2AuthenticationException::class)
+    override fun loadUser(userRequest: OAuth2UserRequest): OAuth2User {
+        val oAuth2User = super.loadUser(userRequest)
 
-        OAuth2User oAuth2User = super.loadUser(userRequest);
+        val oauthUserId = oAuth2User.name
+        val providerTypeCode = userRequest.clientRegistration.registrationId.uppercase()
 
-        String oauthUserId = oAuth2User.getName();
-        String providerTypeCode = userRequest.getClientRegistration().getRegistrationId().toUpperCase();
+        val attributes: Map<String, Any?> = oAuth2User.attributes
+        val attributesProperties = attributes["properties"] as? Map<*, *>
 
-        Map<String, Object> attributes = oAuth2User.getAttributes();
-        Map<String, Object> attributesProperties = (Map<String, Object>) attributes.get("properties");
+        val userNicknameAttributeName = "nickname"
+        val profileImgUrlAttributeName = "profile_image"
 
-        String userNicknameAttributeName = "nickname";
-        String profileImgUrlAttributeName = "profile_image";
+        val nickname = attributesProperties?.get(userNicknameAttributeName) as? String ?: ""
+        val profileImgUrl = attributesProperties?.get(profileImgUrlAttributeName) as? String ?: ""
 
-        String nickname = (String) attributesProperties.get(userNicknameAttributeName);
-        String profileImgUrl = (String) attributesProperties.get(profileImgUrlAttributeName);
-        String username = providerTypeCode + "__%s".formatted(oauthUserId);
-        String password = "";
-        Member member = memberService.modifyOrJoin(username, password, nickname, profileImgUrl);
+        val username = "${providerTypeCode}__$oauthUserId"
+        val password = ""
 
-        return new SecurityUser(
-                member.getId(),
-                member.getUsername(),
-                member.getPassword(),
-                member.getNickname(),
-                member.getAuthorities()
-        );
+        val member: Member = memberService.modifyOrJoin(username, password, nickname, profileImgUrl)
+
+        return SecurityUser(
+            id = member.id,
+            username = member.username,
+            password = member.password,
+            nickname = member.nickname,
+            authorities = member.authorities
+        )
     }
 }

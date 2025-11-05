@@ -1,141 +1,138 @@
-package com.back.global.security;
+package com.back.global.security
 
-import com.back.domain.member.member.entity.Member;
-import com.back.domain.member.member.service.MemberService;
-import com.back.global.exception.ServiceException;
-import com.back.global.rq.Rq;
-import com.back.global.rsData.RsData;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
+import com.back.domain.member.member.entity.Member
+import com.back.domain.member.member.service.MemberService
+import com.back.global.exception.ServiceException
+import com.back.global.rq.Rq
+import com.back.global.rsData.RsData
+import jakarta.servlet.FilterChain
+import jakarta.servlet.ServletException
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.security.core.userdetails.UserDetails
+import org.springframework.stereotype.Component
+import org.springframework.web.filter.OncePerRequestFilter
 
 @Component
-@RequiredArgsConstructor
-public class CustomAuthenticationFilter extends OncePerRequestFilter {
+class CustomAuthenticationFilter(
+    private val memberService: MemberService,
+    private val rq: Rq
+) : OncePerRequestFilter() {
 
-    private final MemberService memberService;
-    private final Rq rq;
-
-    @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        logger.debug("CustomAuthenticationFilter called");
+    @Throws(ServletException::class, java.io.IOException::class)
+    override fun doFilterInternal(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        filterChain: FilterChain
+    ) {
+        logger.debug("CustomAuthenticationFilter called")
 
         try {
-            authenticate(request, response, filterChain);
-        } catch (ServiceException e) {
-
-            RsData rsData = e.getRsData();
-            response.setContentType("application/json");
-            response.setStatus(rsData.getStatusCode());
-            response.getWriter().write("""
-                    {
-                        "resultCode": "%s",
-                        "msg": "%s"
-                    }
-                    """.formatted(rsData.getResultCode(), rsData.getMsg()));
-
-        } catch (Exception e) {
-            throw e;
+            authenticate(request, response, filterChain)
+        } catch (e: ServiceException) {
+            val rsData: RsData<*> = e.rsData
+            response.contentType = "application/json"
+            response.status = rsData.statusCode
+            response.writer.write(
+                """
+                {
+                  "resultCode": "${rsData.resultCode}",
+                  "msg": "${rsData.msg}"
+                }
+                """.trimIndent()
+            )
+        } catch (e: Exception) {
+            throw e
         }
-
     }
 
-    private void authenticate(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        if(!request.getRequestURI().startsWith("/api/")) {
-            filterChain.doFilter(request, response);
-            return;
+    @Throws(ServletException::class, java.io.IOException::class)
+    private fun authenticate(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        filterChain: FilterChain
+    ) {
+        val uri = request.requestURI
+        if (!uri.startsWith("/api/")) {
+            filterChain.doFilter(request, response)
+            return
         }
 
-        if(List.of("/api/v1/members/join", "/api/v1/members/login").contains(request.getRequestURI())) {
-            filterChain.doFilter(request, response);
-            return;
+        if (uri in listOf("/api/v1/members/join", "/api/v1/members/login")) {
+            filterChain.doFilter(request, response)
+            return
         }
 
-        String apiKey;
-        String accessToken;
-
-        String headerAuthorization = rq.getHeader("Authorization", "");
-
-        if (!headerAuthorization.isBlank()) {
-            if (!headerAuthorization.startsWith("Bearer "))
-                throw new ServiceException("401-2", "Authorization 헤더가 Bearer 형식이 아닙니다.");
-
-            String[] headerAuthorizationBits = headerAuthorization.split(" ", 3);
-
-            apiKey = headerAuthorizationBits[1];
-            accessToken = headerAuthorizationBits.length == 3 ? headerAuthorizationBits[2] : "";
+        val headerAuthorization = rq.getHeader("Authorization", "")
+        val (apiKey, accessToken) = if (headerAuthorization.isNotBlank()) {
+            if (!headerAuthorization.startsWith("Bearer ")) {
+                throw ServiceException("401-2", "Authorization 헤더가 Bearer 형식이 아닙니다.")
+            }
+            val bits = headerAuthorization.split(" ", limit = 3)
+            val key = bits.getOrNull(1).orEmpty()
+            val token = bits.getOrNull(2).orEmpty()
+            key to token
         } else {
-            apiKey = rq.getCookieValue("apiKey", "");
-            accessToken = rq.getCookieValue("accessToken", "");
+            rq.getCookieValue("apiKey", "") to rq.getCookieValue("accessToken", "")
         }
 
-        boolean isAdiKeyExists = !apiKey.isBlank();
-        boolean isAccessTokenExists = !accessToken.isBlank();
+        val isApiKeyExists = apiKey.isNotBlank()
+        val isAccessTokenExists = accessToken.isNotBlank()
 
-        if(!isAdiKeyExists && !isAccessTokenExists) {
-            filterChain.doFilter(request, response);
-            return;
+        if (!isApiKeyExists && !isAccessTokenExists) {
+            filterChain.doFilter(request, response)
+            return
         }
 
-        Member member = null;
-        boolean isAccessTokenValid = false;
+        var member: Member? = null
+        var isAccessTokenValid = false
+
         if (isAccessTokenExists) {
-            Map<String, Object> payload = memberService.payloadOrNull(accessToken);
-
+            val payload: Map<String, Any?>? = memberService.payloadOrNull(accessToken)
             if (payload != null) {
-                long id = (long) payload.get("id");
-                String username = (String) payload.get("username");
-                String nickname = (String) payload.get("nickname");
+                val id = (payload["id"] as? Number)?.toLong()
+                val username = payload["username"] as? String
+                val nickname = payload["nickname"] as? String
 
-                member = new Member(id, username, nickname);
-                isAccessTokenValid = true;
+                if (id != null && username != null && nickname != null) {
+                    member = Member(id, username, nickname)
+                    isAccessTokenValid = true
+                }
             }
         }
 
         if (member == null) {
             member = memberService
-                    .findByApiKey(apiKey)
-                    .orElseThrow(() -> new ServiceException("401-3", "API 키가 유효하지 않습니다."));
+                .findByApiKey(apiKey)
+                .orElseThrow { ServiceException("401-3", "API 키가 유효하지 않습니다.") }
         }
+
+        // 여기서부터는 member 가 null 일 수 없도록 확정
+        val memberNonNull = member!!
 
         if (isAccessTokenExists && !isAccessTokenValid) {
-            String newAccessToken = memberService.genAccessToken(member);
-            rq.setCookie("accessToken", newAccessToken);
-            rq.setHeader("accessToken", newAccessToken);
+            val newAccessToken = memberService.genAccessToken(memberNonNull)
+            rq.setCookie("accessToken", newAccessToken)
+            rq.setHeader("accessToken", newAccessToken)
         }
 
-        UserDetails user = new SecurityUser(
-                member.getId(),
-                member.getUsername(),
-                "",
-                member.getNickname(),
-                member.getAuthorities()
-        );
+        val user: UserDetails = SecurityUser(
+            id = memberNonNull.id,
+            username = memberNonNull.username,
+            password = "",
+            nickname = memberNonNull.nickname,
+            authorities = memberNonNull.authorities
+        )
 
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                user,
-                user.getPassword(),
-                user.getAuthorities()
-        );
+        val authentication = UsernamePasswordAuthenticationToken(
+            user,
+            user.password,
+            user.authorities
+        )
 
-
-        SecurityContextHolder
-                .getContext()
-                .setAuthentication(authentication);
-
-
-        filterChain.doFilter(request, response);
+        SecurityContextHolder.getContext().authentication = authentication
+        filterChain.doFilter(request, response)
     }
 }

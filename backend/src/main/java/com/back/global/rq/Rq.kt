@@ -1,94 +1,68 @@
-package com.back.global.rq;
+package com.back.global.rq
 
-import com.back.domain.member.member.entity.Member;
-import com.back.global.exception.ServiceException;
-import com.back.global.security.SecurityUser;
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Optional;
+import com.back.domain.member.member.entity.Member
+import com.back.global.exception.ServiceException
+import com.back.global.security.SecurityUser
+import jakarta.servlet.http.Cookie
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
+import lombok.RequiredArgsConstructor
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.stereotype.Component
 
 @Component
 @RequiredArgsConstructor
-public class Rq {
+class Rq(
+    private val request: HttpServletRequest,
+    private val response: HttpServletResponse
+) {
 
-    private final HttpServletRequest request;
-    private final HttpServletResponse response;
+    val actor: Member
+        get() = SecurityContextHolder
+            .getContext()
+            ?.authentication
+            ?.principal
+            ?.let {
+                if (it is SecurityUser) {
+                    Member(it.id, it.username, it.nickname)
+                } else {
+                    null
+                }
+            } ?: throw ServiceException(
+            "401-1",
+            "로그인 후 이용해주세요."
+        )
 
-    public Member getActor() {
+    fun setHeader(name: String, value: String?) = response.setHeader(name, value)
 
-        return Optional.ofNullable(
-                        SecurityContextHolder
-                                .getContext().
-                                getAuthentication()
-                )
-                .map(Authentication::getPrincipal)
-                .filter(principal -> principal instanceof SecurityUser)
-                .map(principal -> (SecurityUser) principal)
-                .map(securityUser -> new Member(
-                        securityUser.getId(),
-                        securityUser.getUsername(),
-                        securityUser.getNickname()
-                ))
-                .orElseThrow(() -> new ServiceException("401-1", "로그인 후 이용해주세요."));
+    fun getHeader(name: String, defaultValue: String): String = request.getHeader(name) ?: defaultValue
 
-    }
+    fun getCookieValue(name: String, defaultValue: String): String = request
+        .cookies
+        ?.firstOrNull { it.name == name }
+        ?.value
+        ?.takeIf { it.isNotBlank() }
+        ?: defaultValue
 
-    public void setHeader(String name, String value) {
-        response.setHeader(name, value);
-    }
+    fun setCookie(name: String, value: String?) =
+        Cookie(name, value ?: "")
+            .apply {
+                path = "/"
+                isHttpOnly = true
+                domain = "localhost"
+                secure = true
+                setAttribute("SameSite", "Strict")
 
-    public String getHeader(String name, String defaultValue) {
-        return Optional
-                .ofNullable(request.getHeader(name))
-                .filter(headerValue -> !headerValue.isBlank())
-                .orElse(defaultValue);
-    }
+                if (value.isNullOrBlank()) {
+                    maxAge = 0
+                }
+            }
+            .also {
+                response.addCookie(it)
+            }
 
-    public String getCookieValue(String name, String defaultValue) {
-        return Optional
-                .ofNullable(request.getCookies())
-                .flatMap(
-                        cookies ->
-                                Arrays.stream(cookies)
-                                        .filter(cookie -> cookie.getName().equals(name))
-                                        .map(Cookie::getValue)
-                                        .filter(value -> !value.isBlank())
-                                        .findFirst()
-                )
-                .orElse(defaultValue);
-    }
+    fun deleteCookie(name: String) = setCookie(name, null)
 
-    public void setCookie(String name, String value) {
-        if (value == null) value = "";
+    fun sendRedirect(url: String) = response.sendRedirect(url)
 
-        Cookie cookie = new Cookie(name, value);
-        cookie.setPath("/");
-        cookie.setHttpOnly(true);
-        cookie.setDomain("localhost");
-        cookie.setSecure(true);
-        cookie.setAttribute("SameSite", "Strict");
-
-        // 값이 없다면 해당 쿠키변수를 삭제하라는 뜻
-        if (value.isBlank()) {
-            cookie.setMaxAge(0);
-        }
-
-        response.addCookie(cookie);
-    }
-
-    public void deleteCookie(String name) {
-        setCookie(name, null);
-    }
-
-    public void sendRedirect(String url) throws IOException {
-        response.sendRedirect(url);
-    }
 }
